@@ -1,0 +1,16 @@
+# MultipleFiles/requirements.py
+fastapi
+uvicorn[standard]
+sqlalchemy
+alembic
+pydantic
+psycopg2-binary # For PostgreSQL
+python-multipart
+requests
+aiohttp
+python-dotenv
+tensorflow==2.14.0 # Specify version for compatibility
+twilio
+websockets # For the dedicated websocket_server.py
+httpx      # For the FastAPI backend to communicate with websocket_server.py
+redis      # For potential future Pub/Sub or caching, though not fully implemented in this example

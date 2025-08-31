@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: coastal
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d coastal"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/coastal
+      MODEL_PATH: /app/ml/saved_model # Ensure this path is correct inside the container
+      TWILIO_SID: ${TWILIO_SID} # Make sure these are set in your .env file
+      TWILIO_TOKEN: ${TWILIO_TOKEN}
+      TWILIO_FROM: ${TWILIO_FROM}
+      SMS_RECIPIENT: ${SMS_RECIPIENT}
+      HTTP_BROADCAST_URL: http://websocket:8002 # Point to the websocket service's HTTP endpoint
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./MultipleFiles:/app # Mount your source code
+      # If your saved_model is not built into the image, you might need to mount it:
+      # - ./path/to/your/saved_model:/app/ml/saved_model
+
+  websocket: # NEW SERVICE
+    build:
+      context: .
+      dockerfile: Dockerfile.websocket # We will create this Dockerfile
+    ports:
+      - "8001:8001" # WebSocket port for frontend connection
+      - "8002:8002" # HTTP port for backend to send messages
+    environment:
+      WEBSOCKET_PORT: 8001
+      HTTP_BROADCAST_PORT: 8002
+    volumes:
+      - ./MultipleFiles/websocket_server.py:/app/websocket_server.py # Mount the websocket server script
+      - ./MultipleFiles/requirements.py:/app/requirements.txt # Mount requirements for build
+    command: sh -c "pip install -r requirements.txt && python websocket_server.py" # Install deps and run
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE: http://backend:8000 # Point to the backend service
+      VITE_WS_URL: ws://localhost:8001 # For local browser access, use localhost. For Docker internal, use ws://websocket:8001
+                                       # You might need to change this based on how you access the frontend.
+                                       # If you access frontend via localhost:3000, then ws://localhost:8001 is correct.
+                                       # If frontend is accessed via a proxy or different domain, adjust accordingly.
+    depends_on:
+      - backend
+      - websocket # Frontend depends on websocket for connection
+    volumes:
+      - ./MultipleFiles:/app # Mount your source code
+
+volumes:
+  postgres_data:
